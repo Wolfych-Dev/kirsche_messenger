@@ -978,6 +978,13 @@
         .watch-together-panel:-webkit-full-screen .activity-resize-grip { display: none; }
         .watch-together-panel.is-fullscreen .watch-together-header { cursor: default; }
 
+        /* КЛАВИША O (В ЛЮБОМ РЕЖИМЕ) ИЛИ F11 (В НАСТОЯЩЕМ ФУЛСКРИНЕ БРАУЗЕРА) —
+           УБИРАЕТ ВЕРХНЮЮ ПЛАШКУ С ЗАГОЛОВКОМ И КНОПКАМИ, ЧТОБЫ ВИДЕО/ЭКРАН ЗАНИМАЛИ
+           ВСЮ ПЛОЩАДЬ ПАНЕЛИ — И В ФУЛСКРИНЕ, И В ОБЫЧНОМ ПЛАВАЮЩЕМ ОКНЕ */
+        .watch-together-panel.wt-header-hidden .watch-together-header {
+            display: none;
+        }
+
         .wt-fullscreen-btn .icon-fs-exit { display: none; }
         .wt-fullscreen-btn.is-full .icon-fs-enter { display: none; }
         .wt-fullscreen-btn.is-full .icon-fs-exit { display: flex; }
@@ -3615,13 +3622,50 @@
             panel.classList.toggle('is-fullscreen', isFull);
             const btn = panel.querySelector('.wt-fullscreen-btn');
             if (btn) btn.classList.toggle('is-full', isFull);
-            if (!isFull && panel.style.display !== 'none') {
-                requestAnimationFrame(() => clampActivityPanelToViewport(panelId));
+            if (!isFull) {
+                panel.classList.remove('wt-header-hidden'); // при выходе из фулскрина плашка снова видна
+                if (panel.style.display !== 'none') {
+                    requestAnimationFrame(() => clampActivityPanelToViewport(panelId));
+                }
             }
         });
     }
     document.addEventListener('fullscreenchange', onActivityFullscreenChange);
     document.addEventListener('webkitfullscreenchange', onActivityFullscreenChange);
+
+    // УБРАТЬ ПЛАШКУ ЗАГОЛОВКА У ОТКРЫТОЙ ПАНЕЛИ "СМОТРЕТЬ ВМЕСТЕ" / "ДЕМОНСТРАЦИЯ ЭКРАНА",
+    // ЧТОБЫ ВИДЕО/ЭКРАН ЗАНИМАЛИ ВСЮ ЕЁ ПЛОЩАДЬ — РАБОТАЕТ КАК В ФУЛСКРИНЕ БРАУЗЕРА,
+    // ТАК И В ОБЫЧНОМ ПЛАВАЮЩЕМ ОКНЕ
+    function getOpenActivityPanel() {
+        return ['watchTogetherPanel', 'screenSharePanel']
+            .map(id => document.getElementById(id))
+            .find(p => p && p.style.display !== 'none' && !p.classList.contains('minimized'));
+    }
+
+    function toggleActivityHeaderVisibility(panel) {
+        if (!panel) return;
+        panel.classList.toggle('wt-header-hidden');
+    }
+
+    // F11 — ТОЛЬКО КОГДА ПАНЕЛЬ УЖЕ В НАСТОЯЩЕМ ФУЛСКРИНЕ БРАУЗЕРА (ЧТОБЫ НЕ ПЕРЕХВАТЫВАТЬ
+    // F11 ВЕЗДЕ ЕЩЁ И НЕ МЕШАТЬ ОБЫЧНОМУ ПОВЕДЕНИЮ БРАУЗЕРА, КОГДА ФУЛСКРИНА НЕТ);
+    // O — УБИРАЕТ ПЛАШКУ У ЛЮБОЙ ОТКРЫТОЙ ПАНЕЛИ, ДАЖЕ БЕЗ ФУЛСКРИНА БРАУЗЕРА
+    document.addEventListener('keydown', (e) => {
+        if (isTypingTarget(document.activeElement)) return;
+        if (e.key === 'F11' || e.code === 'F11') {
+            const fsPanel = ['watchTogetherPanel', 'screenSharePanel']
+                .map(id => document.getElementById(id))
+                .find(p => p && (document.fullscreenElement === p || document.webkitFullscreenElement === p));
+            if (!fsPanel) return; // не в нашем фулскрине — пусть браузер обрабатывает F11 как обычно
+            e.preventDefault();
+            toggleActivityHeaderVisibility(fsPanel);
+        } else if (e.code === 'KeyO') {
+            const panel = getOpenActivityPanel();
+            if (!panel) return;
+            e.preventDefault();
+            toggleActivityHeaderVisibility(panel);
+        }
+    });
 
     function startActivityPanelDrag(e, panelId) {
         if (e.target.closest('.wt-head-btn')) return; // клик по кнопкам заголовка — не начинаем перетаскивание
@@ -3773,6 +3817,7 @@
 
         const panel = document.getElementById('watchTogetherPanel');
         panel.style.display = 'flex';
+        panel.classList.remove('wt-header-hidden');
         restoreActivityPanelPosition('watchTogetherPanel');
         document.getElementById('watchTogetherHostBadge').style.display = isHost ? 'none' : 'inline';
 
@@ -3946,6 +3991,7 @@
                 if (exit) { try { exit.call(document); } catch(e) {} }
             }
             panel.style.display = 'none';
+            panel.classList.remove('wt-header-hidden');
         }
     }
 
@@ -4175,6 +4221,7 @@
         const panel = document.getElementById('screenSharePanel');
         if (!panel) return;
         panel.style.display = 'flex';
+        panel.classList.remove('wt-header-hidden');
         restoreActivityPanelPosition('screenSharePanel');
         document.getElementById('screenShareHostBadge').style.display = isHost ? 'none' : 'inline';
     }
@@ -4187,6 +4234,7 @@
                 if (exit) { try { exit.call(document); } catch(e) {} }
             }
             panel.style.display = 'none';
+            panel.classList.remove('wt-header-hidden');
         }
         const video = document.getElementById('screenShareVideo');
         if (video) video.srcObject = null;
